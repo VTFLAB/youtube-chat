@@ -1,20 +1,24 @@
-import {EventEmitter} from 'events'
+import { EventEmitter } from 'events'
 import axios from 'axios'
-import {actionToRenderer, CommentItem, parseData, usecToTime} from './parser'
-import {Action} from './yt-response'
+import { actionToRenderer, CommentItem, parseData, usecToTime } from './parser'
+import { Action } from './yt-response'
 
 
 /**
  * YouTubeライブチャット取得イベント
  */
 export class LiveChat extends EventEmitter {
-  private static readonly headers = {'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.142 Safari/537.36'}
+  private static readonly headers = { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.142 Safari/537.36' }
   public readonly channelId?: string
   public liveId?: string
+  private key?: string
+  private continuation?: string
+  private clientName?: string
+  private clientVersion?: string
   private prevTime = Date.now()
   private observer?: NodeJS.Timeout
 
-  constructor(options: {channelId: string} | {liveId: string}, private interval = 1000) {
+  constructor(options: { channelId: string } | { liveId: string }, private interval = 1000) {
     super()
     if ('channelId' in options) {
       this.channelId = options.channelId
@@ -26,19 +30,33 @@ export class LiveChat extends EventEmitter {
   }
 
   public async start(): Promise<boolean> {
-    if (this.channelId) {
-      const liveRes = await axios.get(`https://www.youtube.com/channel/${this.channelId}/live`, {headers: LiveChat.headers})
+    var liveRes = null;
+    if (this.liveId) {
+      liveRes = await axios.get(`https://www.youtube.com/watch?v=${this.liveId}`, { headers: LiveChat.headers })
       if (liveRes.data.match(/LIVE_STREAM_OFFLINE/)) {
         this.emit('error', new Error("Live stream offline"))
         return false
       }
-      this.liveId = liveRes.data.match(/"watchEndpoint":{"videoId":"(\S*?)"}/)![1] as string
     }
 
-    if (!this.liveId) {
+    if (this.channelId) {
+      liveRes = await axios.get(`https://www.youtube.com/channel/${this.channelId}/live`, { headers: LiveChat.headers })
+      if (liveRes.data.match(/LIVE_STREAM_OFFLINE/)) {
+        this.emit('error', new Error("Live stream offline"))
+        return false
+      }
+      this.liveId = liveRes.data.match(/"liveStreamabilityRenderer":{"videoId":"(\S*?)",/)![1] as string
+    }
+
+    if (!this.liveId || liveRes === null) {
       this.emit('error', new Error('Live stream not found'))
       return false
     }
+
+    this.key = liveRes.data.match(/"INNERTUBE_API_KEY":"(\S*?)"/)![1] as string
+    this.continuation = liveRes.data.match(/"continuation":"(\S*?)"/)![1] as string
+    this.clientName = liveRes.data.match(/"clientName":"(\S*?)"/)![1] as string
+    this.clientVersion = liveRes.data.match(/"clientVersion":"(\S*?)"/)![1] as string
 
     this.observer = setInterval(() => this.fetchChat(), this.interval)
 
@@ -54,13 +72,22 @@ export class LiveChat extends EventEmitter {
   }
 
   private async fetchChat() {
-    const res = await axios.get(`https://www.youtube.com/live_chat?v=${this.liveId}&pbj=1`, {headers: LiveChat.headers})
-    if (res.data[1].response.contents.messageRenderer) {
+    const res = await axios.post(`https://www.youtube.com/youtubei/v1/live_chat/get_live_chat?key=${this.key}`, {
+      context: {
+        client: {
+          clientName: this.clientName,
+          clientVersion: this.clientVersion,
+        }
+      },
+      continuation: this.continuation
+    }, { headers: LiveChat.headers })
+
+    if (res.data.continuationContents.messageRenderer) {
       this.stop("Live stream is finished")
       return
     }
 
-    const items = res.data[1].response.contents.liveChatRenderer.actions.slice(0, -1)
+    const items = res.data.continuationContents.liveChatContinuation.actions.slice(0, -1)
       .filter((v: Action) => {
         const messageRenderer = actionToRenderer(v)
         if (messageRenderer !== null) {
