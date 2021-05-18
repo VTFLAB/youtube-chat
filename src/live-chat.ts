@@ -73,6 +73,26 @@ export class LiveChat extends EventEmitter {
   }
 
   private async fetchChat() {
+        var liveRes = null;
+        let nowID = null;
+        if (this.channelId) {
+            liveRes = await axios_1.default.get(`https://www.youtube.com/channel/${this.channelId}/live`, { headers: LiveChat.headers });
+            if (liveRes.data.match(/LIVE_STREAM_OFFLINE/)) {
+                this.stop("Live stream is finished");
+                return;
+            }
+            if (liveRes.data.match(/"liveStreamabilityRenderer":{"videoId":"(\S*?)",/)){
+                nowID = liveRes.data.match(/"liveStreamabilityRenderer":{"videoId":"(\S*?)",/)[1];
+                if(nowID !== this.liveId){
+                    this.stop("Live stream is finished");
+                    return;
+                }
+            }
+        }
+        if (!nowID || liveRes === null) {
+            this.stop("Live stream is finished");
+            return;
+        }
     const res = await axios.post(`https://www.youtube.com/youtubei/v1/live_chat/get_live_chat?key=${this.key}`, {
       context: {
         client: {
@@ -82,10 +102,6 @@ export class LiveChat extends EventEmitter {
       },
       continuation: this.continuation
     }, { headers: LiveChat.headers })
-    if (typeof res.data.continuationContents.messageRenderer === "undefined") {
-      this.stop("Live stream is finished")
-      return
-    }
     if (res.data.continuationContents.messageRenderer) {
       this.stop("Live stream is finished")
       return
