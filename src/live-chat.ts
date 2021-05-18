@@ -45,7 +45,8 @@ export class LiveChat extends EventEmitter {
         this.emit('error', new Error("Live stream offline"))
         return false
       }
-      this.liveId = liveRes.data.match(/"liveStreamabilityRenderer":{"videoId":"(\S*?)",/)![1] as string
+      if (liveRes.data.match(/"liveStreamabilityRenderer":{"videoId":"(\S*?)",/))
+        this.liveId = liveRes.data.match(/"liveStreamabilityRenderer":{"videoId":"(\S*?)",/)![1] as string
     }
 
     if (!this.liveId || liveRes === null) {
