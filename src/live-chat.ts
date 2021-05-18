@@ -82,7 +82,10 @@ export class LiveChat extends EventEmitter {
       },
       continuation: this.continuation
     }, { headers: LiveChat.headers })
-
+    if (typeof res.data.continuationContents.messageRenderer === "undefined") {
+      this.stop("Live stream is finished")
+      return
+    }
     if (res.data.continuationContents.messageRenderer) {
       this.stop("Live stream is finished")
       return
