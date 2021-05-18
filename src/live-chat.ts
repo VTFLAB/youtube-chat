@@ -55,7 +55,12 @@ export class LiveChat extends EventEmitter {
     }
 
     this.key = liveRes.data.match(/"INNERTUBE_API_KEY":"(\S*?)"/)![1] as string
-    this.continuation = liveRes.data.match(/"continuation":"(\S*?)"/)![1] as string
+        if(liveRes.data.match(/"continuation":"(\S*?)"/)){
+            this.continuation = liveRes.data.match(/"continuation":"(\S*?)"/)[1] as string
+        }else{
+            this.emit('error', new Error('Live stream not found'));
+            return false;
+        }
     this.clientName = liveRes.data.match(/"clientName":"(\S*?)"/)![1] as string
     this.clientVersion = liveRes.data.match(/"clientVersion":"(\S*?)"/)![1] as string
 
